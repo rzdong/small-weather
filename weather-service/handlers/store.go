@@ -2,7 +2,10 @@ package handlers
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
+	"os"
+	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -34,9 +37,37 @@ type UserPreferences struct {
 func InitDB() {
 	var err error
 	// Use utf8mb4 explicitly so Chinese city names and user data can be stored safely.
+	mysqlUser := strings.TrimSpace(os.Getenv("MYSQL_USER"))
+	if mysqlUser == "" {
+		mysqlUser = strings.TrimSpace(os.Getenv("MYSQL_ROOT"))
+	}
+	mysqlPassword := strings.TrimSpace(os.Getenv("MYSQL_PASSWORD"))
+	mysqlHost := strings.TrimSpace(os.Getenv("MYSQL_HOST"))
+	if mysqlHost == "" {
+		mysqlHost = "127.0.0.1"
+	}
+	mysqlPort := strings.TrimSpace(os.Getenv("MYSQL_PORT"))
+	if mysqlPort == "" {
+		mysqlPort = "3306"
+	}
+	mysqlDB := strings.TrimSpace(os.Getenv("MYSQL_DB"))
+
+	if mysqlUser == "" || mysqlPassword == "" || mysqlDB == "" {
+		log.Fatal("Missing MySQL configuration. Please set MYSQL_USER/MYSQL_ROOT, MYSQL_PASSWORD, MYSQL_DB in .env")
+	}
+
+	dsn := fmt.Sprintf(
+		"%s:%s@(%s:%s)/%s?parseTime=true&charset=utf8mb4&collation=utf8mb4_unicode_ci",
+		mysqlUser,
+		mysqlPassword,
+		mysqlHost,
+		mysqlPort,
+		mysqlDB,
+	)
+
 	DB, err = sql.Open(
 		"mysql",
-		"root:Rzdong123456@(127.0.0.1:3306)/weather-app?parseTime=true&charset=utf8mb4&collation=utf8mb4_unicode_ci",
+		dsn,
 	)
 	if err != nil {
 		log.Fatalf("Error opening MySQL: %v", err)
