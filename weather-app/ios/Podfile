@@ -41,4 +41,34 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
   end
+
+  crop_controller_file = File.join(
+    __dir__,
+    'Pods',
+    'TOCropViewController',
+    'Objective-C',
+    'TOCropViewController',
+    'TOCropViewController.m'
+  )
+
+  if File.exist?(crop_controller_file)
+    content = File.read(crop_controller_file)
+    problematic_block = <<~BLOCK
+      // fix: On iOS 26, overlay with iPadOS windowingControl area.
+      if (@available(iOS 26.0, *)) {
+        if (!verticalLayout) {
+          UIViewLayoutRegion *layoutRegion = [UIViewLayoutRegion safeAreaLayoutRegionWithCornerAdaptation: UIViewLayoutRegionAdaptivityAxisVertical];
+          UIEdgeInsets edgeInsets = [self.view edgeInsetsForLayoutRegion:layoutRegion];
+          insets.top = edgeInsets.top;
+          insets.left = edgeInsets.left;
+          insets.bottom = edgeInsets.bottom;
+        }
+      }
+
+    BLOCK
+
+    if content.include?(problematic_block)
+      File.write(crop_controller_file, content.sub(problematic_block, ''))
+    end
+  end
 end
