@@ -73,6 +73,14 @@ class AppProvider with ChangeNotifier {
     _lightAngle = prefs.getDouble('lightAngle') ?? (-3 * pi / 4);
     _shadowIntensity = prefs.getDouble('shadowIntensity') ?? 1.0;
     _restoreLocalUserProfile(prefs);
+    final hasLocalCityState = _restoreLocalCityState(prefs);
+
+    if (hasLocalCityState) {
+      final cacheState = await _loadWeatherFromCache();
+      if (cacheState.isStale) {
+        fetchWeather(forceRefresh: true);
+      }
+    }
 
     final token = prefs.getString('auth_token');
     if (token != null) {
@@ -80,9 +88,11 @@ class AppProvider with ChangeNotifier {
       final restored = await _restoreAuthenticatedSession(token, prefs);
       if (!restored) {
         await _clearAuthState(prefs);
-        await initLocation();
+        if (!hasLocalCityState) {
+          await initLocation();
+        }
       }
-    } else {
+    } else if (!hasLocalCityState) {
       await initLocation();
     }
 
@@ -94,6 +104,51 @@ class AppProvider with ChangeNotifier {
     _userName = prefs.getString('user_name') ?? _userName;
     _userEmail = prefs.getString('user_email') ?? _userEmail;
     _userAvatar = prefs.getString('user_avatar') ?? _userAvatar;
+  }
+
+  bool _restoreLocalCityState(SharedPreferences prefs) {
+    final rawCities = prefs.getString('cached_cities');
+    if (rawCities != null && rawCities.isNotEmpty) {
+      try {
+        final decoded = json.decode(rawCities);
+        if (decoded is List) {
+          _userCities = decoded
+              .whereType<Map>()
+              .map(
+                (city) => city.map(
+                  (key, value) =>
+                      MapEntry(key.toString(), value?.toString() ?? ''),
+                ),
+              )
+              .toList();
+        }
+      } catch (_) {}
+    }
+
+    _selectedCityId = prefs.getString('selected_city_id') ?? _selectedCityId;
+    _selectedCityName =
+        prefs.getString('selected_city_name') ?? _selectedCityName;
+
+    if (_selectedCityId.isNotEmpty && _selectedCityName.isNotEmpty) {
+      notifyListeners();
+      return true;
+    }
+
+    if (_userCities.isNotEmpty) {
+      _selectedCityId = _userCities.first['id']?.toString() ?? '';
+      _selectedCityName = _userCities.first['name']?.toString() ?? '';
+      notifyListeners();
+      return _selectedCityId.isNotEmpty;
+    }
+
+    return false;
+  }
+
+  Future<void> _persistCityState() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('cached_cities', json.encode(_userCities));
+    await prefs.setString('selected_city_id', _selectedCityId);
+    await prefs.setString('selected_city_name', _selectedCityName);
   }
 
   /// Try to get the user's GPS location and auto-detect city.
@@ -212,38 +267,18 @@ class AppProvider with ChangeNotifier {
     }
   }
 
-  Future<void> _restoreRemoteSettings() async {
-    try {
-      final settings = await ApiService.getSettings();
-      if (settings.isNotEmpty) {
-        _language = settings['language'] ?? _language;
-        _isDarkMode = settings['is_dark_mode'] ?? _isDarkMode;
-        _lightAngle = settings['light_angle']?.toDouble() ?? _lightAngle;
-        _shadowIntensity =
-            settings['shadow_intensity']?.toDouble() ?? _shadowIntensity;
-
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-        prefs.setString('language', _language);
-        prefs.setBool('isDarkMode', _isDarkMode);
-        prefs.setDouble('lightAngle', _lightAngle);
-        prefs.setDouble('shadowIntensity', _shadowIntensity);
-
-        notifyListeners();
-      }
-    } catch (e) {
-      debugPrint('Restore settings error: $e');
-    }
-  }
-
   // ---- Auth ----
 
   Future<bool> login(String email, String password) async {
+    final localCities = _citiesSnapshotForSync();
     try {
       final result = await ApiService.login(email, password);
       if (result['success'] == true) {
         await _applyAuthData(result['data']);
-        fetchCities();
-        _restoreRemoteSettings();
+        await _syncSettings();
+        await _syncLocalCitiesAfterAuth(localCities);
+        await fetchCities();
+        await fetchProfile();
         notifyListeners();
         return true;
       }
@@ -271,12 +306,15 @@ class AppProvider with ChangeNotifier {
     required String password,
     required String code,
   }) async {
+    final localCities = _citiesSnapshotForSync();
     try {
       final result = await ApiService.register(email, password, code);
       if (result['success'] == true) {
         await _applyAuthData(result['data']);
+        await _syncSettings();
+        await _syncLocalCitiesAfterAuth(localCities);
         await fetchCities();
-        await _restoreRemoteSettings();
+        await fetchProfile();
         notifyListeners();
         return null;
       }
@@ -422,6 +460,7 @@ class AppProvider with ChangeNotifier {
         _selectedCityName = _userCities[0]['name'] ?? '';
         fetchWeather();
       }
+      await _persistCityState();
       notifyListeners();
     } catch (e) {
       debugPrint('Fetch cities error: $e');
@@ -431,6 +470,7 @@ class AppProvider with ChangeNotifier {
   Future<void> addCity(Map<String, String> city) async {
     try {
       _userCities = await ApiService.addCity(city);
+      await _persistCityState();
       notifyListeners();
     } catch (e) {
       debugPrint('Add city error: $e');
@@ -457,6 +497,7 @@ class AppProvider with ChangeNotifier {
           _selectedCityName = '';
         }
       }
+      await _persistCityState();
       notifyListeners();
     } catch (e) {
       debugPrint('Delete city error: $e');
@@ -469,7 +510,7 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void selectCity(String id, String name) {
+  void selectCity(String id, String name) async {
     _selectedCityId = id;
     _selectedCityName = name;
     _currentWeather = {};
@@ -477,6 +518,7 @@ class AppProvider with ChangeNotifier {
     _dailyForecast = [];
     _dailyForecastCityId = '';
     _lastSyncTime = null;
+    await _persistCityState();
     notifyListeners();
     _loadCityWeather();
   }
@@ -527,6 +569,7 @@ class AppProvider with ChangeNotifier {
         _userCities.add(city);
         SharedPreferences prefs = await SharedPreferences.getInstance();
         prefs.setString('local_cities', json.encode(_userCities));
+        await _persistCityState();
       } else {
         _userCities = await ApiService.addCity({
           'id': cityId,
@@ -534,6 +577,7 @@ class AppProvider with ChangeNotifier {
           'lat': city['lat']?.toString() ?? '',
           'lon': city['lon']?.toString() ?? '',
         });
+        await _persistCityState();
       }
     }
 
@@ -709,6 +753,48 @@ class AppProvider with ChangeNotifier {
     await prefs.setString('user_avatar', _userAvatar);
   }
 
+  List<Map<String, String>> _citiesSnapshotForSync() {
+    final snapshot = <Map<String, String>>[];
+    for (final rawCity in _userCities) {
+      if (rawCity is! Map) {
+        continue;
+      }
+
+      final cityId = rawCity['id']?.toString() ?? '';
+      final cityName = rawCity['name']?.toString() ?? '';
+      if (cityId.isEmpty || cityName.isEmpty) {
+        continue;
+      }
+
+      snapshot.add({
+        'id': cityId,
+        'name': cityName,
+        'lat': rawCity['lat']?.toString() ?? '',
+        'lon': rawCity['lon']?.toString() ?? '',
+      });
+    }
+    return snapshot;
+  }
+
+  Future<void> _syncLocalCitiesAfterAuth(
+    List<Map<String, String>> localCities,
+  ) async {
+    if (!_isLoggedIn || localCities.isEmpty) {
+      return;
+    }
+
+    for (final city in localCities) {
+      try {
+        await ApiService.addCity(city);
+      } catch (e) {
+        debugPrint('Sync city after auth error: $e');
+      }
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('local_cities');
+  }
+
   Future<bool> _restoreAuthenticatedSession(
     String token,
     SharedPreferences prefs,
@@ -749,8 +835,23 @@ class AppProvider with ChangeNotifier {
       await prefs.setDouble('shadowIntensity', _shadowIntensity);
 
       if (_userCities.isNotEmpty) {
-        _selectedCityId = _userCities[0]['id']?.toString() ?? '';
-        _selectedCityName = _userCities[0]['name']?.toString() ?? '';
+        final hasSelectedCity = _userCities.any(
+          (city) => city['id']?.toString() == _selectedCityId,
+        );
+        if (!hasSelectedCity) {
+          _selectedCityId = _userCities[0]['id']?.toString() ?? '';
+          _selectedCityName = _userCities[0]['name']?.toString() ?? '';
+        } else {
+          _selectedCityName =
+              _userCities
+                  .firstWhere(
+                    (city) => city['id']?.toString() == _selectedCityId,
+                    orElse: () => _userCities[0],
+                  )['name']
+                  ?.toString() ??
+              _selectedCityName;
+        }
+        await _persistCityState();
         final cacheState = await _loadWeatherFromCache();
         if (!cacheState.loaded) {
           await fetchWeather(forceRefresh: true);

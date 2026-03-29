@@ -4,13 +4,22 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 class ApiService {
+  static const String _productionBaseUrl = 'http://159.75.201.229:3001/api';
+  static const String _customBaseUrl = String.fromEnvironment('API_BASE_URL');
+
   static String get baseUrl {
-    if (kIsWeb) {
-      return 'http://localhost:3001/api';
+    if (_customBaseUrl.isNotEmpty) {
+      return _customBaseUrl;
     }
+
+    if (kReleaseMode || kProfileMode) {
+      return _productionBaseUrl;
+    }
+
     if (Platform.isAndroid) {
       return 'http://10.0.2.2:3001/api';
     }
+
     return 'http://localhost:3001/api';
   }
 
