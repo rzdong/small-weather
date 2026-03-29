@@ -1,0 +1,53 @@
+# Go代码构建并通过tcloud-cmd部署到腾讯云服务器
+main:
+  web_trigger_dev:
+    - stages:
+        - name: "构建Go应用"
+          jobs:
+            - name: "编译Go程序"
+              image: golang:1.22
+              env:
+                GOPROXY: https://goproxy.cn,direct
+              script: |
+                cd weather-app
+                echo "开始构建Go应用..."
+                go mod init app 2>/dev/null || true
+                go mod tidy
+                go build -o weather main.go
+                ls -la
+                echo "构建完成，二进制文件: weather"
+        
+        - name: "tcloud-cmd部署到CVM"
+          imports: https://cnb.cool/your-org/your-repo/-/blob/main/secrets/tencent-cloud.env
+          image: tencentcom/tcloud-cmd
+          settings:
+            secret_id: ${TENCENT_SECRET_ID}
+            secret_key: ${TENCENT_SECRET_KEY}
+            region: ap-guangzhou
+            instance_ids: ins-xxxxxxxx
+            script: |
+              # 创建应用目录
+              mkdir -p /opt/weather
+              
+              # 停止旧应用进程
+              pkill weather || echo "未找到运行中的weather进程"
+              
+              # 上传新应用文件（这里假设文件已通过其他方式上传）
+              # 实际使用时可能需要先通过SCP等方式上传weather文件
+              
+              # 启动新应用
+              cd /opt/weather
+              chmod +x weather
+              nohup ./weather > /var/log/weather.log 2>&1 &
+              
+              # 检查应用是否启动成功
+              sleep 3
+              if pgrep weather > /dev/null; then
+                echo "✅ 应用部署成功，进程ID: $(pgrep weather)"
+                echo "📝 日志文件: /var/log/weather.log"
+              else
+                echo "❌ 应用启动失败，请检查日志: /var/log/weather.log"
+                exit 1
+              fi
+            query_instance: true
+            endpoint: tat.tencentcloudapi.com  # 如需走公网，取消注释并设置
