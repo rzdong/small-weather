@@ -17,7 +17,7 @@ func getEnv(key, fallback string) string {
 
 func proxyQWeather(c *gin.Context, path string) {
 	host := "https://pf5vxbpy5n.re.qweatherapi.com"
-	key := getEnv("QWEATHER_KEY", "bc55932daedd4fa9bf52eb374fc9904b")
+	key := getEnv("QWEATHER_KEY", "")
 
 	req, err := http.NewRequest("GET", host+path, nil)
 	if err != nil {
@@ -45,9 +45,9 @@ func proxyQWeather(c *gin.Context, path string) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to read upstream response"})
 		return
 	}
-	
+
 	// Check content encoding, but for simplicity we assume plaintext or the compressed flag in standard http handles it. Wait, the user specifically mentioned --compressed. Go's http.Client handles gzip transparently by default.
-	
+
 	c.Data(resp.StatusCode, "application/json", body)
 }
 
