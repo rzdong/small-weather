@@ -10,20 +10,18 @@ import (
 	sts "github.com/tencentyun/qcloud-cos-sts-sdk/go"
 )
 
-const (
-	avatarCOSBucket     = "static-1257938258"
-	avatarCOSRegion     = "ap-chongqing"
-	avatarCOSAppID      = "1257938258"
-	avatarCOSBasePrefix = "flwoerweather/avatar"
-)
-
 func GetAvatarUploadSTS(c *gin.Context) {
+	bucket := os.Getenv("COS_BUCKET")
+	region := os.Getenv("COS_REGION")
+	appID := os.Getenv("COS_APPID")
+	basePrefix := os.Getenv("COS_BASE_PREFIX")
 	secretID := os.Getenv("COS_SECRET_ID")
 	secretKey := os.Getenv("COS_SECRET_KEY")
-	if secretID == "" || secretKey == "" {
+
+	if bucket == "" || region == "" || appID == "" || basePrefix == "" || secretID == "" || secretKey == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
-			"message": "COS temporary credential service is not configured",
+			"message": "COS temporary credential service is not fully configured",
 		})
 		return
 	}
@@ -34,12 +32,12 @@ func GetAvatarUploadSTS(c *gin.Context) {
 		return
 	}
 
-	prefix := fmt.Sprintf("%s/%d/*", avatarCOSBasePrefix, userID)
+	prefix := fmt.Sprintf("%s/%d/*", basePrefix, userID)
 	resource := fmt.Sprintf(
 		"qcs::cos:%s:uid/%s:%s/%s",
-		avatarCOSRegion,
-		avatarCOSAppID,
-		avatarCOSBucket,
+		region,
+		appID,
+		bucket,
 		prefix,
 	)
 
@@ -48,7 +46,7 @@ func GetAvatarUploadSTS(c *gin.Context) {
 	})
 
 	result, err := client.GetCredential(&sts.CredentialOptions{
-		Region:          avatarCOSRegion,
+		Region:          region,
 		DurationSeconds: 1800,
 		Policy: &sts.CredentialPolicy{
 			Statement: []sts.CredentialPolicyStatement{
@@ -96,9 +94,9 @@ func GetAvatarUploadSTS(c *gin.Context) {
 			},
 			"startTime":   result.StartTime,
 			"expiredTime": result.ExpiredTime,
-			"bucket":      avatarCOSBucket,
-			"region":      avatarCOSRegion,
-			"prefix":      fmt.Sprintf("%s/%d/", avatarCOSBasePrefix, userID),
+			"bucket":      bucket,
+			"region":      region,
+			"prefix":      fmt.Sprintf("%s/%d/", basePrefix, userID),
 		},
 	})
 }

@@ -89,7 +89,7 @@ func ValidateJWTForMiddleware(token string) (*jwtClaims, error) {
 func signJWT(unsignedToken string) (string, error) {
 	secret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
 	if secret == "" {
-		secret = "weather-app-dev-secret"
+		return "", fmt.Errorf("JWT_SECRET is not configured in environment")
 	}
 
 	mac := hmac.New(sha256.New, []byte(secret))

@@ -61,7 +61,7 @@ func AddCity(c *gin.Context) {
 		GetCities(c)
 		return
 	}
-	if err != nil && err != sql.ErrNoRows {
+	if err != sql.ErrNoRows {
 		log.Println("Check existing city DB error:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "DB error"})
 		return

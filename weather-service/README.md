@@ -44,18 +44,19 @@ weather-service/
 ### 1. 数据库准备
 使用 `db.sql` 在您的 MySQL 实例中创建数据库及表结构。
 
-### 2. 环境配置
-在项目根目录创建 `.env` 文件，并参考以下内容进行配置：
+# 本地环境配置 (需创建 .env 文件并参考以下配置)
 
-```env
-# MySQL 配置
+# MySQL 连接配置
 MYSQL_HOST=127.0.0.1
 MYSQL_PORT=3306
 MYSQL_USER=root
 MYSQL_PASSWORD=your_password
 MYSQL_DB=weather_db
 
-# SMTP 配置 (用于发送验证码)
+# 认证安全配置
+JWT_SECRET=your_jwt_secret_key  # 必填，用于加密 Token
+
+# SMTP 邮件服务配置 (注册/重置密码验证码)
 SMTP_HOST=smtp.exmail.qq.com
 SMTP_PORT=465
 SMTP_USERNAME=your_email@example.com
@@ -63,13 +64,16 @@ SMTP_PASSWORD=your_smtp_password
 SMTP_FROM_EMAIL=your_email@example.com
 SMTP_FROM_NAME=小天气
 
-# 腾讯云 COS 配置 (头像上传)
+# 腾讯云 COS 配置 (用户头像上传)
 COS_SECRET_ID=your_cos_id
 COS_SECRET_KEY=your_cos_key
+COS_BUCKET=your_cos_bucket_name
+COS_REGION=your_cos_region
+COS_APPID=your_cos_appid
+COS_BASE_PREFIX=your_cos_base_prefix (e.g. flwoerweather/avatar)
 
-# 和风天气 Key
+# 和风天气 API Key (数据接口)
 QWEATHER_KEY=your_qweather_key
-```
 
 ### 3. 运行服务
 ```bash
