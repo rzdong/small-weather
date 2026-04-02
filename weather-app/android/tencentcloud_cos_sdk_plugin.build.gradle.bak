@@ -1,0 +1,53 @@
+group 'com.tencent.cos.flutter.plugin'
+version '1.0'
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:7.1.2'
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        // 添加本地Maven仓库配置
+//        maven {
+//            url uri('/Users/jordanqin/QCloudAndroid/library/QCloudCosFlutter/local_repo')
+//        }
+//        flatDir { dirs project(":tencentcloud_cos_sdk_plugin").file("libs") }
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.tencent.cos.flutter.plugin'
+    compileSdkVersion 31
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        minSdkVersion 19
+    }
+}
+
+dependencies {
+//    implementation 'com.squareup.okhttp3:okhttp:3.12.6'
+//    implementation 'com.squareup.okio:okio:1.15.0'
+//    implementation 'com.parse.bolts:bolts-tasks:1.4.0'
+//
+//    implementation(name: 'qcloud-foundation-1.5.55', ext: 'aar')
+//    implementation(name: 'cos-android-nobeacon-5.9.13', ext: 'aar')
+
+    implementation 'com.qcloud.cos:cos-android:5.9.50'
+    implementation 'net.sourceforge.streamsupport:streamsupport-minifuture:1.7.4'
+}

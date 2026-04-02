@@ -1,0 +1,54 @@
+# Project Root .gitignore
+
+# Dependencies
+node_modules/
+vendor/
+
+# Build artifacts
+build/
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment and Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+cert.pub
+
+# Mobile specific (general)
+# app-release.apk (User wants to keep this, so I will NOT ignore it specifically at root if it exists there)
+# However, usually build/ handles this.
+
+# Sub-project specific catch-all
+**/logs/
+**/debug/
+**/release/
+**/.dart_tool/
+**/.flutter-plugins*
+**/pubspec.lock (optional, but often kept)
+
+# Specific to weather-service
+weather-service/weather-service
+weather-service/logs/
+
+# Specific to weather-app
+weather-app/.dart_tool/
+weather-app/build/
+
+./app-release.apk
