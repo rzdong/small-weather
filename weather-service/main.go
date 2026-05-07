@@ -11,11 +11,11 @@ import (
 )
 
 func main() {
+	/** 加载env文件到运行的环境变量中 */
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, it is fine.")
 	}
 	handlers.InitDB()
-	handlers.StartVerificationCodeCleanupScheduler()
 
 	r := gin.Default()
 	r.Use(cors.Default())

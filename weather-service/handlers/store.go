@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -8,9 +9,13 @@ import (
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/redis/go-redis/v9"
 )
 
-var DB *sql.DB
+var (
+	DB    *sql.DB
+	Redis *redis.Client
+)
 
 type User struct {
 	ID       int
@@ -79,6 +84,36 @@ func InitDB() {
 
 	ensureSchema()
 	log.Println("MySQL Connection established.")
+
+	initRedis()
+}
+
+func initRedis() {
+	redisHost := strings.TrimSpace(os.Getenv("REDIS_HOST"))
+	redisPort := strings.TrimSpace(os.Getenv("REDIS_PORT"))
+	redisUser := strings.TrimSpace(os.Getenv("REDIS_USER"))
+	redisPassword := strings.TrimSpace(os.Getenv("REDIS_PASSWORD"))
+
+	if redisHost == "" {
+		redisHost = "127.0.0.1"
+	}
+	if redisPort == "" {
+		redisPort = "6379"
+	}
+
+	Redis = redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Username: redisUser,
+		Password: redisPassword,
+		DB:       0, // use default DB
+	})
+
+	// 测试连接
+	if err := Redis.Ping(context.Background()).Err(); err != nil {
+		log.Printf("Warning: Failed to connect to Redis: %v. Verification codes will fail.", err)
+	} else {
+		log.Println("Redis Connection established.")
+	}
 }
 
 func ensureSchema() {

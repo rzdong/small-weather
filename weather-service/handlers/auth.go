@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -47,8 +49,10 @@ type UpdateProfileRequest struct {
 	UserAvatar string `json:"user_avatar"`
 }
 
+// 发送邮箱注册验证码
 func SendRegisterCode(c *gin.Context) {
 	var req SendCodeRequest
+	// 先判断邮箱是否填写，没填写直接返回异常
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "A valid email is required"})
 		return
@@ -56,6 +60,7 @@ func SendRegisterCode(c *gin.Context) {
 
 	var exists int
 	err := DB.QueryRow("SELECT COUNT(*) FROM users WHERE email = ?", req.Email).Scan(&exists)
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "DB error"})
 		return
@@ -76,6 +81,7 @@ func SendRegisterCode(c *gin.Context) {
 
 func Register(c *gin.Context) {
 	var req RegisterRequest
+	/** ShouldBindJSON 会自动校验请求体中的字段是否符合RegisterRequest的结构，如果 */
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Email, password, and code are required"})
 		return
@@ -361,47 +367,27 @@ func Logout(c *gin.Context) {
 
 func saveVerificationCode(email, purpose string) error {
 	code := generateVerificationCode()
-	expiresAt := time.Now().Add(verificationCodeTTL)
+	key := fmt.Sprintf("vc:%s:%s", purpose, email)
 
-	_, err := DB.Exec(
-		`INSERT INTO verification_codes (email, purpose, code, expires_at, consumed_at)
-		 VALUES (?, ?, ?, ?, NULL)
-		 ON DUPLICATE KEY UPDATE code = VALUES(code), expires_at = VALUES(expires_at), consumed_at = NULL`,
-		email,
-		purpose,
-		code,
-		expiresAt,
-	)
+	ctx := context.Background()
+	err := Redis.Set(ctx, key, code, verificationCodeTTL).Err()
 	if err != nil {
 		return err
 	}
 
-	log.Printf("verification code [%s] for %s: %s", purpose, email, code)
+	log.Printf("verification code [%s] for %s: %s (stored in Redis)", purpose, email, code)
 	return sendVerificationEmail(email, purpose, code)
 }
 
 func verifyCode(email, purpose, code string) error {
-	var storedCode string
-	var expiresAt time.Time
-	var consumedAt sql.NullTime
-	err := DB.QueryRow(
-		"SELECT code, expires_at, consumed_at FROM verification_codes WHERE email = ? AND purpose = ?",
-		email,
-		purpose,
-	).Scan(&storedCode, &expiresAt, &consumedAt)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return fmt.Errorf("Please send the verification code first")
-		}
-		return fmt.Errorf("DB error")
-	}
+	key := fmt.Sprintf("vc:%s:%s", purpose, email)
+	ctx := context.Background()
 
-	if consumedAt.Valid {
-		return fmt.Errorf("This verification code has already been used")
-	}
-
-	if time.Now().After(expiresAt) {
-		return fmt.Errorf("The verification code has expired")
+	storedCode, err := Redis.Get(ctx, key).Result()
+	if err == redis.Nil {
+		return fmt.Errorf("Please send the verification code first")
+	} else if err != nil {
+		return fmt.Errorf("Redis error")
 	}
 
 	if strings.TrimSpace(storedCode) != strings.TrimSpace(code) {
@@ -412,48 +398,12 @@ func verifyCode(email, purpose, code string) error {
 }
 
 func consumeVerificationCode(email, purpose, code string) error {
-	_, err := DB.Exec(
-		"DELETE FROM verification_codes WHERE email = ? AND purpose = ? AND code = ?",
-		email,
-		purpose,
-		code,
-	)
-	return err
+	key := fmt.Sprintf("vc:%s:%s", purpose, email)
+	ctx := context.Background()
+	return Redis.Del(ctx, key).Err()
 }
 
-func CleanupExpiredVerificationCodes() error {
-	_, err := DB.Exec(
-		"DELETE FROM verification_codes WHERE expires_at < ? OR consumed_at IS NOT NULL",
-		time.Now(),
-	)
-	return err
-}
-
-func StartVerificationCodeCleanupScheduler() {
-	go func() {
-		for {
-			now := time.Now()
-			nextRun := time.Date(
-				now.Year(),
-				now.Month(),
-				now.Day(),
-				12,
-				0,
-				0,
-				0,
-				now.Location(),
-			)
-			if !nextRun.After(now) {
-				nextRun = nextRun.Add(24 * time.Hour)
-			}
-
-			time.Sleep(time.Until(nextRun))
-			if err := CleanupExpiredVerificationCodes(); err != nil {
-				log.Println("cleanup verification codes error:", err)
-			}
-		}
-	}()
-}
+// Removed MySQL-based cleanup scheduler as Redis handles TTL automatically.
 
 func userExists(email string) (bool, error) {
 	var exists int
