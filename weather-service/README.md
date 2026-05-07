@@ -53,6 +53,12 @@ MYSQL_USER=root
 MYSQL_PASSWORD=your_password
 MYSQL_DB=weather_db
 
+# Redis 连接配置 (用于存储验证码)
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_USER=
+REDIS_PASSWORD=
+
 # 认证安全配置
 JWT_SECRET=your_jwt_secret_key  # 必填，用于加密 Token
 
